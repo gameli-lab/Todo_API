@@ -1,6 +1,6 @@
 from rest_framework import serializers
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
-from .models import User
+from .models import User, Task
 
 class LoginSerializer(TokenObtainPairSerializer):
     def validate(self, attrs):
@@ -23,3 +23,8 @@ class RegisterSerializer(serializers.ModelSerializer):
                 password = validated_data['password']
                 )
         return user
+
+class TaskSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Task
+        fields = ['id', 'title', 'description', 'due_date', 'status', 'user']

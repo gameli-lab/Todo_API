@@ -41,13 +41,19 @@ class User(AbstractBaseUser, PermissionsMixin):
         return self.is_admin
 
 
-class TodoItems(models.Model):
-    user = models.ForeignKey(User, on_delete = models.CASCADE)
+class Task(models.Model):
+    STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('in_progress', 'In Progress'),
+        ('completed', 'Completed'),
+    ]
     title = models.CharField(max_length=200)
-    description = models.TextField()
-    completed = models.BooleanField(default = False)
+    description = models.TextField(blank=True)
+    due_date = models.DateTimeField()
+    status = models.CharField(max_length=20, choices = STATUS_CHOICES, default = 'pending')
+    user = models.ForeignKey(User, on_delete = models.CASCADE, related_name= 'tasks')
+
 
     def __str__(self):
         return self.title
-
 

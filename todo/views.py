@@ -1,10 +1,11 @@
 from django.shortcuts import render
-from rest_framework import status
+from rest_framework import status,  generics
 from rest_framework.response import Response
 from rest_framework.views import APIView
-from .serializers import RegisterSerializer, LoginSerializer
+from .serializers import RegisterSerializer, LoginSerializer, TaskSerializer
 from rest_framework_simplejwt.views import TokenObtainPairView
 from rest_framework.permissions import IsAuthenticated
+from .models import Task
 
 
 class RegisterView(APIView):
@@ -24,3 +25,11 @@ class MyView(APIView):
 
     def get(self, request):
         pass
+
+class TaskList(generics.ListCreateAPIView):
+    queryset = Task.objects.all()
+    serializer_class = TaskSerializer
+
+class TaskDetail(generics.RetrieveUpdateDestroyAPIView):
+    queryset = Task.objects.all()
+    serializer_class = TaskSerializer
