@@ -9,6 +9,11 @@ from django.http import Http404
 from django.shortcuts import get_object_or_404
 from rest_framework.decorators import api_view, permission_classes
 from .models import Task
+from django_filters.rest_framework import DjangoFilterBackend
+from rest_framework import filters
+import django_filters
+from .models import Task
+from django.utils import timezone
 
 
 class RegisterView(APIView):
@@ -53,10 +58,27 @@ class MyView(APIView):
     def get(self, request):
         pass 
 
+class TaskFilter(django_filters.FilterSet):
+    title = django_filters.CharFilter(lookup_expr='icontains')
+    description = django_filters.CharFilter(lookup_expr='icontains')
+    due_date_before = django_filters.DateFilter(field_name='due_date', lookup_expr='lte')
+    due_date_after = django_filters.DateFilter(field_name='due_date', lookup_expr='gte')
+    status_changed_after = django_filters.DateTimeFilter(field_name='status_changed_at', lookup_expr='gte')
+    
+    class Meta:
+        model = Task
+        fields = ['status', 'title', 'description', 'due_date', 'due_date_before', 
+                  'due_date_after', 'status_changed_after']
+
 class TaskList(generics.ListCreateAPIView):
     #queryset = Task.objects.all()
     serializer_class = TaskSerializer
     permission_classes = [IsAuthenticated]
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    filterset_fields = ['status', 'due_date']
+    search_fields = ['title', 'description']
+    ordering_fields = ['created_at', 'due_date', 'status_changed_at']
+ 
 
     def get_queryset(self):
         """Return tasks filtered by the current user."""
@@ -202,9 +224,9 @@ class TaskDetail(generics.RetrieveUpdateDestroyAPIView):
                 status = status.HTTP_500_INTERNAL_SERVER_ERROR
             )
         
-    @api_view(['PATCH'])
-    @permission_classes([IsAuthenticated])
-    def update_task_status(request, pk):
+@api_view(['PATCH'])
+@permission_classes([IsAuthenticated])
+def update_task_status(request, pk):
         """update only the status field of a task"""
         try:
             task = get_object_or_404(Task, pk=pk, user=request.user)

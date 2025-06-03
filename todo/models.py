@@ -1,5 +1,6 @@
 from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, PermissionsMixin
 from django.db import models
+from django.utils import timezone
 
 class CustomUserManager(BaseUserManager):
     def create_user(self, fullname, phone, email, password=None):
@@ -51,9 +52,21 @@ class Task(models.Model):
     description = models.TextField(blank=True)
     due_date = models.DateTimeField()
     status = models.CharField(max_length=20, choices = STATUS_CHOICES, default = 'pending')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    status_changed_at = models.DateTimeField(null=True, blank = True)
     user = models.ForeignKey(User, on_delete = models.CASCADE, related_name= 'tasks')
 
 
     def __str__(self):
         return self.title
 
+    def save(self, *args, **kwargs):
+        if self.pk is not None:
+            old_task = Task.objects.get(pk=self.pk)
+            if old_task.status != self.status:
+                self.status_changed_at = timezone.now()
+            else:
+                self.status_changed_at = timezone.now()
+
+            super().save(*args, **kwargs)

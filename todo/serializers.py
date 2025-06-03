@@ -54,6 +54,7 @@ class TaskSerializer(serializers.ModelSerializer):
     class Meta:
         model = Task
         fields = ['id', 'title', 'description', 'due_date', 'status', 'user']
+        read_only_fields = ['id', 'created_at', 'updated_at', 'status_changed_at', 'user']
 
         def validate_title(self, value):
             """Check if the title is not empty."""
