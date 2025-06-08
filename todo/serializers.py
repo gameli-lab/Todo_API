@@ -22,6 +22,18 @@ class RegisterSerializer(serializers.ModelSerializer):
         'email': {'required': True, 'allow_blank': False},
     }
 
+    def validate_empty_values(self, data):
+        errors = {}
+        if not data.get('email'):
+            errors['email'] = ['This field may not be blank.']
+        if not data.get('password'):
+            errors['password'] = ['This field may not be blank.']
+        
+        if errors:
+            raise serializers.ValidationError(errors)
+        
+        return super().validate_empty_values(data)
+
     def validate_email(self, value):
         """Check if the email is already registered."""
         if User.objects.filter(email=value).exists():
@@ -53,29 +65,32 @@ class RegisterSerializer(serializers.ModelSerializer):
 class TaskSerializer(serializers.ModelSerializer):
     class Meta:
         model = Task
-        fields = ['id', 'title', 'description', 'due_date', 'status', 'user']
+        fields = ['id', 'title', 'description', 'due_date', 'status', 'created_at', 'updated_at', 'status_changed_at', 'user']
         read_only_fields = ['id', 'created_at', 'updated_at', 'status_changed_at', 'user']
 
-        def validate_title(self, value):
-            """Check if the title is not empty."""
-            if not value:
-                raise serializers.ValidationError("Title cannot be empty.")
-            return value
+    def validate_title(self, value):
+        """Check if the title is not empty."""
+        if not value:
+            raise serializers.ValidationError("Title cannot be empty.")
+        return value
         
-        def validate_due_date(self, value):
-            """ Check if the due date is in the future."""
+    def validate_due_date(self, value):
+        """ Check if the due date is in the future."""
+        try:
             if value < timezone.now().date():
                 raise serializers.ValidationError("""Due date cannot be in the past.""")
-            return value
+        except TypeError:
+            raise serializers.ValidationError("Due date must be a valid date.")
+        return value
 
 class TaskStatusSerializer(serializers.ModelSerializer):
     class Meta:
         model = Task
         fields = ['status']
 
-        def validate_status(self, value):
-            """check if status is validated"""
-            valid_statuses = [status[0] for status in Task.STATUS_CHOICES]
-            if value not in valid_statuses:
-                raise serializers.ValidationError(f"status must be one of: {', '.join(valid_statuses)}")
-            return value
+    def validate_status(self, value):
+        """check if status is validated"""
+        valid_statuses = [status[0] for status in Task.STATUS_CHOICES]
+        if value not in valid_statuses:
+            raise serializers.ValidationError(f"status must be one of: {', '.join(valid_statuses)}")
+        return value

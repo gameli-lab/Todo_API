@@ -75,14 +75,26 @@ class TaskList(generics.ListCreateAPIView):
     serializer_class = TaskSerializer
     permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
-    filterset_fields = ['status', 'due_date']
+    filterset_fields = ['status', 'due_date', 'title', 'description', 'status_changed_at']
     search_fields = ['title', 'description']
     ordering_fields = ['created_at', 'due_date', 'status_changed_at']
  
 
     def get_queryset(self):
         """Return tasks filtered by the current user."""
-        return Task.objects.filter(user=self.request.user)
+        queryset = Task.objects.filter(user=self.request.user)
+        due_date_after = self.request.query_params.get('due_date_after')
+        due_date_before = self.request.query_params.get('due_date_before')
+        is_overdue = self.request.query_params.get('is_overdue')
+        
+        if due_date_after:
+            queryset = queryset.filter(due_date__gte=due_date_after)
+        if due_date_before:
+            queryset = queryset.filter(due_date__lte=due_date_before)
+        if is_overdue and is_overdue.lower() == 'true':
+            queryset = queryset.filter(due_date__lt=timezone.now(), status__in=['pending', 'in_progress'])
+            
+        return queryset
     
     def perform_create(self, serializer):
         """Assign current user when creating a task."""
@@ -105,24 +117,29 @@ class TaskList(generics.ListCreateAPIView):
     def list(self, request, *args, **kwargs):
         """List tasks related to a user."""
         try:
-            response=super().list(request, *args, **kwargs)
-            return Response(
-                {
+            queryset = self.filter_queryset(self.get_queryset())
+            page = self.paginate_queryset(queryset)
+            
+            if page is not None:
+                serializer = self.get_serializer(page, many=True)
+                return self.get_paginated_response({
                     "success": True,
                     "message": "Tasks retrieved successfully.",
-                    "data": response.data
-                },
-                status = status.HTTP_200_OK
-            )
+                    "data": serializer.data
+                })
+                
+            serializer = self.get_serializer(queryset, many=True)
+            return Response({
+                "success": True,
+                "message": "Tasks retrieved successfully.",
+                "data": serializer.data
+            })
         except Exception as e:
-            return Response(
-                {
-                    "success": False,
-                    "message": "Failed to retried tasks.",
-                    "error": str(e)
-                },
-                status = status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
+            return Response({
+                "success": False,
+                "message": "Failed to retrieve tasks.",
+                "error": str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 class TaskDetail(generics.RetrieveUpdateDestroyAPIView):
     #queryset = Task.objects.all()
@@ -132,6 +149,16 @@ class TaskDetail(generics.RetrieveUpdateDestroyAPIView):
     def get_queryset(self):
         """Only show tasks belonging to this user."""
         return Task.objects.filter(user=self.request.user)
+    
+    def get_paginated_response(self, data):
+        return Response({
+            'count': self.page.paginator.count,
+            'next': self.get_next_link(),
+            'previous': self.get_previous_link(),
+            'success': True,
+            'message': "Tasks retrieved successfully.",
+            'data': data['data'] if 'data' in data else data
+        })
     
     def retrieve(self, request, *args, **kwargs):
         """Retrieve tasks belonging to this user"""
@@ -150,7 +177,8 @@ class TaskDetail(generics.RetrieveUpdateDestroyAPIView):
             return Response(
                 {
                     "success": False,
-                    "message": "Task not found"
+                    "message": "Task not found",
+                    "detail": "The requested task could not be found"
                 },
                 status = status.HTTP_404_NOT_FOUND
             )
@@ -180,7 +208,8 @@ class TaskDetail(generics.RetrieveUpdateDestroyAPIView):
             return Response(
                 {
                     "success": False,
-                    "message": "Task not found."
+                    "message": "Task not found.",
+                    "detail": "The requested task could not be found"
                 },
                 status = status.HTTP_404_NOT_FOUND
             )
@@ -210,7 +239,8 @@ class TaskDetail(generics.RetrieveUpdateDestroyAPIView):
             return Response(
                 {
                     "success": False,
-                    "message": "Task not found"
+                    "message": "Task not found",
+                    "detail": "The requested task could not be found"
                 },
                 status = status.HTTP_404_NOT_FOUND
             )
@@ -227,46 +257,47 @@ class TaskDetail(generics.RetrieveUpdateDestroyAPIView):
 @api_view(['PATCH'])
 @permission_classes([IsAuthenticated])
 def update_task_status(request, pk):
-        """update only the status field of a task"""
-        try:
-            task = get_object_or_404(Task, pk=pk, user=request.user)
-            serializer = TaskStatusSerializer(task, data=request.data, partial=True)
-            if serializer.is_valid():
-                serializer.save()
-                return Response(
-                    {
-                        "success": True,
-                        "message": "Task status updated successfully.",
-                        "data": {
-                            "id": task.id,
-                            "status": serializer.data['status']
-                        }
-                    },
-                    status=status.HTTP_200_OK
-                )
-            else:
-                return Response(
-                    {
-                        "success": False,
-                        "message": "Validation error",
-                        "errors": serializer.error
-                    },
-                    status=status.HTTP_400_BAD_REQUEST
-                )
-        except Http404:
+    """update only the status field of a task"""
+    try:
+        task = get_object_or_404(Task, pk=pk, user=request.user)
+        serializer = TaskStatusSerializer(task, data=request.data, partial=True)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(
+                {
+                    "success": True,
+                    "message": "Task status updated successfully.",
+                    "data": {
+                        "id": task.id,
+                        "status": serializer.data['status']
+                    }
+                },
+                status=status.HTTP_200_OK
+            )
+        else:
             return Response(
                 {
                     "success": False,
-                    "message": "Task not found",
+                    "message": "Validation error",
+                    "errors": serializer.errors
                 },
-                status=status.HTTP_404_NOT_FOUND
+                status=status.HTTP_400_BAD_REQUEST
             )
-        except Exception as e:
-            return Response(
-                {
-                    "success": False,
-                    "message": "Failed to update task status.",
-                    "error": str(e)
-                },
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
+    except Http404:
+        return Response(
+            {
+                "success": False,
+                "message": "Task not found",
+                "detail": "The requested task could not be found"
+            },
+            status=status.HTTP_404_NOT_FOUND
+        )
+    except Exception as e:
+        return Response(
+            {
+                "success": False,
+                "message": "Failed to update task status.",
+                "error": str(e)
+            },
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
